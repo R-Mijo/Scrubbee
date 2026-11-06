@@ -1,3 +1,5 @@
+![Product banner](docs/assets/banner.svg)
+
 # Scrubbee
 
 **Keep the details yours.**
@@ -5,6 +7,10 @@
 Scrubbee prepares text and supported Word documents for sharing. It replaces detected identifiers and your supplied names with consistent placeholders, then restores them locally when you bring a reply back.
 
 **0.2.1 | Python 3.11+ | Proprietary | No third-party runtime dependencies**
+
+## In plain English
+
+Scrubbee helps prepare private text for sharing. It replaces detected identifiers and terms you add with placeholders, then can restore the original details when a reply comes back. For example, you can replace an email and a member name before pasting a note into another service. Pattern detection can miss details: review the output and keep restoration maps private.
 
 ## Open the local app
 
