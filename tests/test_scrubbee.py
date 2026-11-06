@@ -139,6 +139,18 @@ class ScrubTests(unittest.TestCase):
             self.assertNotIn('customXml/item1.xml', archive.namelist())
             self.assertNotIn('docProps/thumbnail.jpeg', archive.namelist())
 
+    def test_hidden_word_variables_and_coauthor_data_removed(self):
+        settings = f'<w:settings xmlns:w="{W}"><w:docVars><w:docVar w:name="contact" w:val="hidden@example.invalid"/></w:docVars></w:settings>'
+        people = '<people><person userId="hidden@example.invalid"/></people>'
+        output, _, _ = scrub_bytes('x.docx', docx({'word/settings.xml': settings, 'word/people.xml': people}))
+        with zipfile.ZipFile(BytesIO(output)) as archive:
+            self.assertNotIn(b'hidden@example.invalid', archive.read('word/settings.xml'))
+            self.assertNotIn('word/people.xml', archive.namelist())
+
+    def test_uninspectable_chart_data_is_rejected(self):
+        with self.assertRaises(ValueError):
+            scrub_bytes('x.docx', docx({'word/charts/chart1.xml': '<chart><private>hidden@example.invalid</private></chart>'}))
+
 
 class WebTests(unittest.TestCase):
     @classmethod

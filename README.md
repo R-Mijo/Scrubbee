@@ -4,7 +4,7 @@
 
 Scrubbee prepares text and supported Word documents for sharing. It replaces detected identifiers and your supplied names with consistent placeholders, then restores them locally when you bring a reply back.
 
-**0.2.0 Â· Python 3.11+ Â· MIT Â· No third-party dependencies**
+**0.2.1 | Python 3.11+ | Proprietary | No third-party runtime dependencies**
 
 ## Open the local app
 
@@ -23,11 +23,11 @@ No account, model API, analytics or external web assets are used. The local serv
 - UTF-8 `.txt`, `.md`, `.csv` and `.log` files.
 - Text-only `.docx`, including identifiers split across formatting runs, headers, footers, comments and deleted text.
 - Common SSN, Medicare ID, email, US phone, IPv4, selected API-key and Luhn-valid card patterns, plus names/terms you explicitly provide.
-- Removal of Word core properties, listed company/manager fields, custom properties/custom XML, thumbnails, Word author/date attributes and original ZIP metadata.
+- Removal of Word core properties, listed company/manager fields, custom properties/custom XML, thumbnails, hidden document variables, coauthor data, Word author/date attributes and original ZIP metadata.
 
 **Review every export. Pattern matching can miss information.** Names, birth dates, addresses and arbitrary member/account numbers are not automatically understood; supply custom terms and inspect the result. This is pseudonymization assistance, not a guarantee of anonymization or healthcare compliance.
 
-PDFs, images, binary files, encrypted documents, macros, signed documents, embedded media/files and external document links are rejected. Removing custom XML/bindings may affect data-bound features. Keep the original and inspect the exported copy.
+PDFs, images, binary files, encrypted documents, macros, signed documents, charts, embedded media/files, unrecognized document parts and external document links are rejected. Removing custom XML/bindings and document variables may affect data-bound features. Keep the original and inspect the exported copy.
 
 ## Private restoration maps
 

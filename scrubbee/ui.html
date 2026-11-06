@@ -17,7 +17,7 @@
 <div class="status" id="status" role="status" aria-live="polite"></div>
 <button id="download" disabled>Save prepared file</button><button class="secondary" id="copy" disabled>Copy text</button>
 <button class="secondary" id="map" disabled>Save private restoration map</button>
-<p class="small">The server keeps no file history. Save the map if you want to restore details after closing this page. PDFs, images, and Word documents with embedded media are not supported.</p></section></div>
+<p class="small">The server keeps no file history. Save the map if you want to restore details after closing this page. PDFs, images, charts, and Word documents with embedded media or unrecognized parts are not supported.</p></section></div>
 <section class="card restore"><h2>03 / Bring the details back</h2><p class="small">Uses this session’s map, or load a saved map. The restored output contains your original sensitive details.</p>
 <label for="mapfile">Load a private restoration map (optional)</label><input id="mapfile" type="file" accept=".json">
 <div class="grid"><div><label for="reply">Paste the AI reply with placeholders</label><textarea id="reply" placeholder="Paste the reply here…"></textarea><button id="restore">Restore locally</button></div><div><label for="restored">Restored text — private</label><textarea readonly id="restored"></textarea><button class="secondary" id="saveRestored" disabled>Save restored text</button></div></div><div class="status" id="restoreStatus" role="status" aria-live="polite"></div></section>

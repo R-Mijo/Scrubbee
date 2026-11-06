@@ -8,6 +8,7 @@ from functools import wraps
 from io import BytesIO
 import json
 import os
+import posixpath
 from pathlib import Path
 import re
 import secrets
@@ -18,7 +19,8 @@ import xml.etree.ElementTree as ET
 MAX_BYTES = 20 * 1024 * 1024
 TEXT_SUFFIXES = {'.txt', '.md', '.csv', '.log'}
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-TEXT_TAGS = {f'{{{W}}}{name}' for name in ('t', 'delText', 'instrText')}
+A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+TEXT_TAGS = {f'{{{W}}}{name}' for name in ('t', 'delText', 'instrText')} | {f'{{{A}}}t'}
 PATTERNS = [
     ('API_KEY', re.compile(r'\b(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{35}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})\b')),
     ('EMAIL', re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b')),
@@ -241,6 +243,14 @@ def scrub_docx_bytes(data, vault=None, custom_terms=None):
             raise ValueError('Not a supported Word document')
         if sum(info.file_size for info in zin.infolist()) > MAX_BYTES:
             raise ValueError('Expanded document exceeds 20 MiB limit')
+        dropped = {name for name in names if name == 'docProps/custom.xml'
+                   or name.startswith('customXml/') or name.lower().startswith('docprops/thumbnail.')
+                   or name in {'word/people.xml', 'word/commentsExtended.xml',
+                               'word/commentsIds.xml', 'word/commentsExtensible.xml'}}
+        supported = re.compile(r'(?:\[Content_Types\]\.xml|_rels/\.rels|docProps/(?:core|app)\.xml|'
+                               r'word/(?:document|styles|stylesWithEffects|numbering|settings|webSettings|fontTable|'
+                               r'footnotes|endnotes|comments|header\d+|footer\d+)\.xml|'
+                               r'word/theme/theme\d+\.xml|word/_rels/[^/]+\.rels)')
         for info in zin.infolist():
             name = info.filename.lower()
             if info.flag_bits & 1 or name.startswith('/') or '..' in name.split('/'):
@@ -249,26 +259,28 @@ def scrub_docx_bytes(data, vault=None, custom_terms=None):
                 raise ValueError('Documents with images, embedded files, macros or signatures are unsupported; use a text-only copy')
             if name.endswith('/'):
                 continue
+            if info.filename not in dropped and not supported.fullmatch(info.filename):
+                raise ValueError(f'Unsupported Word part cannot be inspected: {info.filename}')
             if not (name.endswith('.xml') or name.endswith('.rels') or name.startswith('docprops/thumbnail.')):
                 raise ValueError(f'Unsupported document part: {info.filename}')
         with zipfile.ZipFile(result, 'w', zipfile.ZIP_DEFLATED) as zout:
             for info in zin.infolist():
                 name = info.filename
-                if (name.endswith('/') or name == 'docProps/custom.xml'
-                        or name.startswith('customXml/') or name.lower().startswith('docprops/thumbnail.')):
+                if name.endswith('/') or name in dropped:
                     continue
                 root, ns = _parse_xml(zin.read(name))
                 if name.endswith('.rels'):
                     for relation in list(root):
                         if relation.get('TargetMode', '').lower() == 'external':
                             raise ValueError('External document links are unsupported; remove them before export')
-                        if relation.get('Type', '').endswith(('/custom-properties', '/customXml', '/metadata/thumbnail')):
+                        target = relation.get('Target', '')
+                        relative_base = '' if name == '_rels/.rels' else posixpath.dirname(posixpath.dirname(name))
+                        part = posixpath.normpath(target.lstrip('/') if target.startswith('/') else posixpath.join(relative_base, target))
+                        if part in dropped or relation.get('Type', '').endswith(('/custom-properties', '/customXml', '/metadata/thumbnail')):
                             root.remove(relation)
                 if name == '[Content_Types].xml':
                     for item in list(root):
-                        if (item.get('PartName') == '/docProps/custom.xml'
-                                or item.get('PartName', '').startswith('/customXml/')
-                                or item.get('PartName', '').lower().startswith('/docprops/thumbnail.')):
+                        if item.get('PartName', '').lstrip('/') in dropped:
                             root.remove(item)
                 if name == 'docProps/core.xml':
                     root.clear()  # Remove all core metadata, not just an author label.
@@ -279,17 +291,19 @@ def scrub_docx_bytes(data, vault=None, custom_terms=None):
                 else:
                     groups = defaultdict(list)
                     def visit(node, paragraph=None):
-                        if node.tag == f'{{{W}}}p':
+                        if node.tag in {f'{{{W}}}p', f'{{{A}}}p'}:
                             paragraph = node
                         if node.tag in TEXT_TAGS:
                             groups[paragraph if paragraph is not None else node].append(node)
                         for attr in list(node.attrib):
-                            if attr.rsplit('}', 1)[-1] in {'author', 'initials', 'date'}:
+                            if attr.rsplit('}', 1)[-1] in {'author', 'initials'}:
+                                node.attrib[attr] = ''
+                            elif attr.rsplit('}', 1)[-1] == 'date' or attr.rsplit('}', 1)[-1].startswith('rsid'):
                                 del node.attrib[attr]
                             elif node.tag.rsplit('}', 1)[-1] in {'docPr', 'cNvPr'} and attr in {'name', 'descr', 'title'}:
                                 node.attrib[attr] = 'ScrubbeeObject' if attr == 'name' else ''
                         for child in list(node):
-                            if child.tag == f'{{{W}}}dataBinding':
+                            if child.tag in {f'{{{W}}}{local}' for local in ('dataBinding', 'docVars', 'mailMerge', 'rsids')}:
                                 node.remove(child)
                         for child in node:
                             visit(child, paragraph)
@@ -299,7 +313,7 @@ def scrub_docx_bytes(data, vault=None, custom_terms=None):
                 # New ZipInfo prevents retaining original ZIP comments/timestamps.
                 zout.writestr(name, _serialize(root, ns))
     return result.getvalue(), {'redactions_count': sum(counts.values()), 'counts_by_type': dict(counts),
-                               'metadata_removed': ['core properties', 'company/manager/template fields', 'custom properties and custom XML', 'document thumbnails', 'Word author/date attributes', 'ZIP metadata']}, v
+                               'metadata_removed': ['core properties', 'company/manager/template fields', 'custom properties and custom XML', 'document thumbnails', 'Word author/date attributes', 'document variables and coauthor data', 'ZIP metadata']}, v
 
 
 def scrub_bytes(filename, data, *, custom_terms=None):
