@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scrubbee"
-version = "0.2.1"
+version = "0.3.0"
 description = "Local privacy preparation with reversible placeholders and a loopback browser interface"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,9 @@ license = {text = "LicenseRef-Proprietary"}
 classifiers = ["License :: Other/Proprietary License"]
 authors = [{name = "Marco Armijo (R-Mijo)"}]
 dependencies = []
+
+[project.optional-dependencies]
+names = ["spacy>=3.8,<3.9"]
 
 [project.scripts]
 scrubbee = "scrubbee.cli:main"

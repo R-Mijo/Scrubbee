@@ -146,7 +146,7 @@ def _luhn(raw):
     return total % 10 == 0
 
 
-def scrub_text(text, vault=None, custom_terms=None):
+def scrub_text(text, vault=None, custom_terms=None, *, auto_names=False):
     if not isinstance(text, str) or len(text.encode('utf8')) > MAX_BYTES:
         raise ValueError('Text must be UTF-8 text within the 20 MiB limit')
     terms = custom_terms if custom_terms is not None else []
@@ -154,9 +154,16 @@ def scrub_text(text, vault=None, custom_terms=None):
         raise ValueError('Provide at most 100 custom terms of up to 200 characters')
     v = vault if vault is not None else ScrubVault()
     candidates = []
+    if type(auto_names) is not bool:
+        raise ValueError('Automatic names must be true or false')
     # Find against the original text once: generated tokens cannot be redacted.
     patterns = [('CUSTOM', re.compile(re.escape(t.strip()), re.I)) for t in terms if t.strip()] + PATTERNS
     protected = [(m.start(), m.end()) for m in TOKEN_RE.finditer(text)]
+    if auto_names:
+        from .names import person_spans
+        for start, end in person_spans(text):
+            if not any(a < end and b > start for a,b in protected):
+                candidates.append((start,end,len(patterns),'PERSON'))
     for priority, (category, pattern) in enumerate(patterns):
         for match in pattern.finditer(text):
             if category == 'CREDIT_CARD' and not _luhn(match.group()):
@@ -208,9 +215,9 @@ def _serialize(root, namespaces):
     return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
 
-def _scrub_nodes(nodes, vault, terms):
+def _scrub_nodes(nodes, vault, terms, auto_names=False):
     raw = ''.join(node.text or '' for node in nodes)
-    report = scrub_text(raw, vault, terms)
+    report = scrub_text(raw, vault, terms, auto_names=auto_names)
     position = 0
     for node in nodes:
         value = node.text or ''
@@ -231,7 +238,7 @@ def _scrub_nodes(nodes, vault, terms):
 
 
 @_serialized_xml
-def scrub_docx_bytes(data, vault=None, custom_terms=None):
+def scrub_docx_bytes(data, vault=None, custom_terms=None, *, auto_names=False):
     if len(data) > MAX_BYTES:
         raise ValueError('Document exceeds 20 MiB limit')
     v = vault if vault is not None else ScrubVault()
@@ -309,30 +316,30 @@ def scrub_docx_bytes(data, vault=None, custom_terms=None):
                             visit(child, paragraph)
                     visit(root)
                     for nodes in groups.values():
-                        counts.update(_scrub_nodes(nodes, v, custom_terms))
+                        counts.update(_scrub_nodes(nodes, v, custom_terms, auto_names))
                 # New ZipInfo prevents retaining original ZIP comments/timestamps.
                 zout.writestr(name, _serialize(root, ns))
     return result.getvalue(), {'redactions_count': sum(counts.values()), 'counts_by_type': dict(counts),
                                'metadata_removed': ['core properties', 'company/manager/template fields', 'custom properties and custom XML', 'document thumbnails', 'Word author/date attributes', 'document variables and coauthor data', 'ZIP metadata']}, v
 
 
-def scrub_bytes(filename, data, *, custom_terms=None):
+def scrub_bytes(filename, data, *, custom_terms=None, auto_names=False):
     suffix = Path(filename).suffix.lower()
     if len(data) > MAX_BYTES:
         raise ValueError('File exceeds 20 MiB limit')
     if suffix == '.docx':
-        return scrub_docx_bytes(data, custom_terms=custom_terms)
+        return scrub_docx_bytes(data, custom_terms=custom_terms, auto_names=auto_names)
     if suffix not in TEXT_SUFFIXES:
         raise ValueError('Supported files: UTF-8 .txt, .md, .csv, .log and text-only .docx. PDF/images are not supported.')
     text = data.decode('utf-8-sig', errors='strict')
     if '\x00' in text:
         raise ValueError('Binary data is not a supported text file')
-    report = scrub_text(text, custom_terms=custom_terms)
+    report = scrub_text(text, custom_terms=custom_terms, auto_names=auto_names)
     return report.scrubbed_text.encode('utf8'), {'redactions_count': report.redactions_count,
                                                'counts_by_type': report.counts_by_type}, report.vault
 
 
-def scrub_file(input_path, output_path=None, vault_path=None, custom_terms=None):
+def scrub_file(input_path, output_path=None, vault_path=None, custom_terms=None, *, auto_names=False):
     source = Path(input_path)
     target = Path(output_path) if output_path else source.with_name('scrubbed-' + secrets.token_hex(4) + source.suffix.lower())
     vault_target = Path(vault_path) if vault_path else target.with_name(target.name + '.restore-' + secrets.token_hex(4) + '.json')
@@ -342,7 +349,7 @@ def scrub_file(input_path, output_path=None, vault_path=None, custom_terms=None)
         raise FileExistsError('Export already exists; choose new output and restoration map names')
     if source.stat().st_size > MAX_BYTES:
         raise ValueError('File exceeds 20 MiB limit')
-    output, report, vault = scrub_bytes(source.name, source.read_bytes(), custom_terms=custom_terms)
+    output, report, vault = scrub_bytes(source.name, source.read_bytes(), custom_terms=custom_terms, auto_names=auto_names)
     # Write the sensitive map first. An output is never created without its map.
     vault.save(vault_target)
     try:

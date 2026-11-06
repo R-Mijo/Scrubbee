@@ -16,6 +16,7 @@ def main(argv=None):
     scrub.add_argument('--out', type=Path)
     scrub.add_argument('--vault', type=Path)
     scrub.add_argument('--name', action='append', default=[])
+    scrub.add_argument('--auto-names', action='store_true', help='Detect English person names using the installed local model')
     restore = sub.add_parser('restore')
     restore.add_argument('file', type=Path)
     restore.add_argument('--vault', required=True, type=Path)
@@ -32,7 +33,7 @@ def main(argv=None):
                               'restored': restore_text(report.scrubbed_text, report.vault),
                               'notice': 'Pattern detection is incomplete. Review before sharing.'}, indent=2))
         elif args.command == 'scrub':
-            print(json.dumps(scrub_file(args.file, args.out, args.vault, args.name), indent=2))
+            print(json.dumps(scrub_file(args.file, args.out, args.vault, args.name, auto_names=args.auto_names), indent=2))
         elif args.command == 'restore':
             restored = restore_text(args.file.read_text(encoding='utf8'), ScrubVault.load(args.vault))
             _write_new(args.out, restored.encode('utf8'))

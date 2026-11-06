@@ -1,5 +1,9 @@
 # Scrubbee: product update — November 6, 2026
 
+## Latest usability update
+
+Automatic local English name recognition and upload/paste preparation are now implemented. Name detection requires the optional local model. Placeholders are reversible redaction, not encryption. See [automation](AUTOMATION.md).
+
 ## What this means to a customer
 
 Scrubbee helps prepare private text for sharing. It replaces detected identifiers and terms you add with placeholders, then can restore the original details when a reply comes back. For example, you can replace an email and a member name before pasting a note into another service. Pattern detection can miss details: review the output and keep restoration maps private.

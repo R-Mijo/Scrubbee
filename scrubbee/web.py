@@ -11,6 +11,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 from .core import MAX_BYTES, ScrubVault, scrub_text, scrub_bytes, restore_text
+from .names import available
 
 
 def create_ui_server(port=8765):
@@ -46,7 +47,7 @@ def create_ui_server(port=8765):
             if self.path != '/':
                 return self._send(404, {'error': 'Not found'})
             page = Path(__file__).with_name('ui.html').read_text(encoding='utf8')
-            self._send(200, page.replace('__NONCE__', nonce).replace('__TOKEN__', token), html=True)
+            self._send(200, page.replace('__NONCE__', nonce).replace('__TOKEN__', token).replace('__NAMES_AVAILABLE__', 'true' if available() else 'false'), html=True)
 
         def do_POST(self):
             origin = f'http://127.0.0.1:{self.server.server_port}'
@@ -69,22 +70,26 @@ def create_ui_server(port=8765):
                     raise ValueError('Request must be an object')
                 if self.path == '/api/scrub':
                     terms = payload.get('custom_terms', [])
+                    auto_names = payload.get('auto_names', False)
+                    if type(auto_names) is not bool:
+                        raise ValueError('Automatic names must be true or false')
                     if 'file_base64' in payload:
                         filename = payload.get('filename')
                         if not isinstance(filename, str) or len(filename) > 255:
                             raise ValueError('Filename required')
                         data = base64.b64decode(payload['file_base64'], validate=True)
-                        output, report, vault = scrub_bytes(filename, data, custom_terms=terms)
+                        output, report, vault = scrub_bytes(filename, data, custom_terms=terms, auto_names=auto_names)
                         response = dict(report, file_base64=base64.b64encode(output).decode('ascii'),
                                         filename='prepared-' + vault.session_id[:8] + Path(filename).suffix.lower())
                         if Path(filename).suffix.lower() != '.docx':
                             response['scrubbed_text'] = output.decode('utf8')
                     else:
-                        report = scrub_text(payload.get('text'), custom_terms=terms)
+                        report = scrub_text(payload.get('text'), custom_terms=terms, auto_names=auto_names)
                         vault = report.vault
                         response = {'scrubbed_text': report.scrubbed_text, 'redactions_count': report.redactions_count,
                                     'counts_by_type': report.counts_by_type}
                     response['vault'] = vault.to_dict()
+                    response['automatic_names'] = auto_names
                     self._send(200, response)
                 elif self.path == '/api/restore':
                     vault = ScrubVault.from_dict(payload.get('vault'))

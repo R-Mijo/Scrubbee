@@ -18,6 +18,14 @@ jobs:
       - run: python -m pip install .
       - run: python -m unittest discover -s tests -v
       - run: python -m scrubbee demo
+      - name: Install automatic English names on one integration runner
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: |
+          python -m pip install ".[names]"
+          python -m spacy download en_core_web_sm
+      - name: Verify real local name recognition
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: python -m unittest discover -s tests -p test_names_integration.py -v
       - name: Import installed package outside the checkout
         working-directory: ${{ runner.temp }}
         run: python -I -c "import scrubbee; print(scrubbee.__version__)"
