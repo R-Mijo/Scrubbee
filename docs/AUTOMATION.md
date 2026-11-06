@@ -34,4 +34,6 @@ The local spaCy English model recognizes PERSON entities. This is statistical na
 
 Scrubbee substitutes placeholders and keeps a private restoration map. That map is plaintext, not encrypted. Encrypting maps at rest, key management and permanent non-reversible redaction are separate future capabilities; none is implied by the word “scrub.”
 
+Custom terms match without regard to capitalization. A term beginning or ending in a word character must have a word boundary at that edge, so `Art` matches a standalone name without changing `started`, `chart`, or `Art_2`. Enter the full identifier you want replaced; custom terms are no longer arbitrary substrings inside longer words or identifiers. Punctuation is treated literally. Distinct spellings such as `Art`, `ART` and `art` receive separate placeholders so restoration preserves their exact original capitalization. This behavior also applies across formatting runs in supported Word documents.
+
 The optional spaCy software and downloaded model keep their own licenses. Scrubbee's proprietary license does not claim ownership of them. See [spaCy model installation](https://spacy.io/usage/models) and the installed model's metadata for license and evaluation details.
