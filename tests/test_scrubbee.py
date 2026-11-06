@@ -36,6 +36,46 @@ def docx(parts=None):
 
 
 class ScrubTests(unittest.TestCase):
+    def test_short_custom_term_does_not_corrupt_substrings_in_words(self):
+        raw='Patient Art started his chart review.'
+        result=scrub_text(raw,custom_terms=['Art'])
+        self.assertIn('started his chart review.',result.scrubbed_text)
+        self.assertEqual(result.redactions_count,1)
+        self.assertEqual(restore_text(result.scrubbed_text,result.vault),raw)
+
+    def test_case_variants_restore_exactly_after_map_roundtrip(self):
+        raw='Art, ART; art. started chart artful party'
+        result=scrub_text(raw,custom_terms=['Art'])
+        self.assertEqual(result.redactions_count,3)
+        self.assertEqual(set(result.vault.token_to_raw.values()),{'Art','ART','art'})
+        loaded=ScrubVault.from_dict(result.vault.to_dict())
+        self.assertEqual(restore_text(result.scrubbed_text,loaded),raw)
+
+    def test_custom_boundaries_respect_unicode_and_identifier_characters(self):
+        raw='Ann Joann ANNIE Ann_2 _Ann éAnn Anné (Ann)'
+        result=scrub_text(raw,custom_terms=['Ann'])
+        self.assertEqual(result.redactions_count,2)
+        self.assertIn('Joann ANNIE Ann_2 _Ann éAnn Anné',result.scrubbed_text)
+        self.assertEqual(restore_text(result.scrubbed_text,result.vault),raw)
+
+    def test_custom_literal_punctuation_and_multiword_terms(self):
+        raw='ID-42 ID-420 (Art) Other (Art) and Ann Lee versus Ann Leeway'
+        result=scrub_text(raw,custom_terms=['ID-42','(Art)','Ann Lee'])
+        self.assertEqual(result.redactions_count,4)
+        self.assertIn('ID-420',result.scrubbed_text)
+        self.assertIn('Ann Leeway',result.scrubbed_text)
+        self.assertEqual(restore_text(result.scrubbed_text,result.vault),raw)
+
+    def test_custom_boundaries_work_across_word_formatting_runs(self):
+        body=f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>Art st</w:t></w:r><w:r><w:t>arted his ch</w:t></w:r><w:r><w:t>art review.</w:t></w:r></w:p></w:body></w:document>'
+        output,report,vault=scrub_bytes('x.docx',docx({'word/document.xml':body}),custom_terms=['Art'])
+        self.assertEqual(report['redactions_count'],1)
+        with zipfile.ZipFile(BytesIO(output)) as archive:
+            xml=ET.fromstring(archive.read('word/document.xml'))
+            combined=''.join(n.text or '' for n in xml.iter(f'{{{W}}}t'))
+        self.assertIn('started his chart review.',combined)
+        self.assertEqual(restore_text(combined,vault),'Art started his chart review.')
+
     def test_patterns_roundtrip_and_repeated_identity(self):
         raw = ('Avery Example: avery@example.invalid; avery@example.invalid; 123-45-6789; '
                '1EG4-TE5-MK72; (602) 555-0199; 192.168.1.9; 4111 1111 1111 1111; sk-proj-abcdefghijklmnopqrstuvwxyz')

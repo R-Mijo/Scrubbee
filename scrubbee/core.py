@@ -63,6 +63,8 @@ class ScrubVault:
     counts_by_type: dict[str, int] = field(default_factory=dict)
 
     def token(self, category, raw):
+        # Exact raw spelling is the key: case variants need separate tokens so
+        # restoration can reproduce each occurrence's original capitalization.
         if raw in self.raw_to_token:
             return self.raw_to_token[raw]
         index = self.counts_by_type.get(category, 0) + 1
@@ -146,6 +148,14 @@ def _luhn(raw):
     return total % 10 == 0
 
 
+def _custom_pattern(term):
+    # Word-like edges match whole identifiers, not substrings of other words.
+    # Punctuation remains literal, including punctuation at a term's edges.
+    left = r'(?<!\w)' if term[0].isalnum() or term[0] == '_' else ''
+    right = r'(?!\w)' if term[-1].isalnum() or term[-1] == '_' else ''
+    return re.compile(left + re.escape(term) + right, re.I)
+
+
 def scrub_text(text, vault=None, custom_terms=None, *, auto_names=False):
     if not isinstance(text, str) or len(text.encode('utf8')) > MAX_BYTES:
         raise ValueError('Text must be UTF-8 text within the 20 MiB limit')
@@ -157,7 +167,7 @@ def scrub_text(text, vault=None, custom_terms=None, *, auto_names=False):
     if type(auto_names) is not bool:
         raise ValueError('Automatic names must be true or false')
     # Find against the original text once: generated tokens cannot be redacted.
-    patterns = [('CUSTOM', re.compile(re.escape(t.strip()), re.I)) for t in terms if t.strip()] + PATTERNS
+    patterns = [('CUSTOM', _custom_pattern(t.strip())) for t in terms if t.strip()] + PATTERNS
     protected = [(m.start(), m.end()) for m in TOKEN_RE.finditer(text)]
     if auto_names:
         from .names import person_spans
